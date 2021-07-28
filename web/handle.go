@@ -15,6 +15,7 @@ type Person struct {
 	Name   string `json:"name"`
 	Age    int    `json:"age"`
 	Gender string `json:"gender"`
+	Email  string `json:"email"`
 }
 
 func NewController() *Controller {
