@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github/estelasouza/api-star-wars/platform"
 	"github/estelasouza/api-star-wars/web"
 	"log"
 	"net/http"
@@ -10,17 +11,19 @@ import (
 )
 
 func main() {
+	repo := platform.NewSWPDiscussionRepository()
+	ctrl := web.NewController(repo)
+	router := mux.NewRouter()
 
-	ctrl := web.NewController()
-	r := mux.NewRouter()
-	r.Methods(http.MethodGet).Path("/ping").HandlerFunc(ctrl.HandlePing)
-
-	r.Methods(http.MethodPost).Path("/person").HandlerFunc(ctrl.HandleCreatePerson)
-	r.Methods(http.MethodGet).Path("/person").HandlerFunc(ctrl.HandleListPeople)
+	router.Methods(http.MethodPost).Path("/discussion").HandlerFunc(ctrl.HandleCreateDiscussion)
+	router.Methods(http.MethodGet).Path("/discussion").HandlerFunc(ctrl.HandleListDiscussions)
+	router.Methods(http.MethodGet).Path("/discussion/{id}").HandlerFunc(ctrl.HandleGetDiscussion)
+	router.Methods(http.MethodPut).Path("/discussion/{id}").HandlerFunc(ctrl.HandleUpdateDiscussion)
+	router.Methods(http.MethodDelete).Path("/discussion/{id}").HandlerFunc(ctrl.HandleDelete)
 
 	log.Println("starting server...")
 
-	err := http.ListenAndServe(":8000", r)
+	err := http.ListenAndServe(":8000", router)
 	if err != nil {
 		log.Printf("[ERROR] %s \n", err.Error())
 		os.Exit(1)

@@ -2,65 +2,152 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	models "github/estelasouza/api-star-wars/models/discussion"
 	"io"
 	"net/http"
+	"strconv"
+
+	"github.com/gorilla/mux"
 )
 
+type DiscussionRepository interface {
+	Create(models.Discussion) error
+	List() ([]models.Discussion, error)
+}
 type Controller struct {
 	nextId uint
-	store  map[uint]Person
-}
-type Person struct {
-	Id     uint   `json:"id"`
-	Name   string `json:"name"`
-	Age    int    `json:"age"`
-	Gender string `json:"gender"`
-	Email  string `json:"email"`
+	store  map[uint]models.Discussion
+	repo   DiscussionRepository
 }
 
-func NewController() *Controller {
+func NewController(repo DiscussionRepository) *Controller {
 	return &Controller{
 		nextId: 1,
-		store:  make(map[uint]Person),
+		store:  make(map[uint]models.Discussion),
+
+		repo: repo,
 	}
 }
 
-func (c *Controller) HandlePing(rw http.ResponseWriter, r *http.Request) {
-	io.WriteString(rw, "pong")
-}
+func (c *Controller) HandleCreateDiscussion(w http.ResponseWriter, r *http.Request) {
 
-func (c *Controller) HandleCreatePerson(rw http.ResponseWriter, r *http.Request) {
-
-	p := Person{}
-	err := json.NewDecoder(r.Body).Decode(&p)
+	d := models.Discussion{}
+	err := json.NewDecoder(r.Body).Decode(&d)
 	if err != nil {
-		rw.WriteHeader(http.StatusBadRequest)
-		io.WriteString(rw, err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
 		return
 	}
 
-	id := c.nextId
-	p.Id = id
-	c.store[id] = p
-	c.nextId++
+	defer r.Body.Close()
 
-	rw.WriteHeader(http.StatusNoContent)
-}
+	err = c.repo.Create(d)
 
-func (c *Controller) HandleListPeople(rw http.ResponseWriter, r *http.Request) {
-	people := make([]Person, len(c.store))
-
-	i := 0
-
-	for _, value := range c.store {
-		people[i] = value
-		i++
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	rw.Header().Add("Content-Type", "application/json")
-	err := json.NewEncoder(rw).Encode(people)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *Controller) HandleListDiscussions(w http.ResponseWriter, r *http.Request) {
+
+	people, err := c.repo.List()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(people)
 	if err != nil {
 		return
 	}
 
+}
+
+func (c *Controller) HandleGetDiscussion(w http.ResponseWriter, r *http.Request) {
+	id, err := c.parseDiscussionId(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	d, found := c.store[id]
+
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(d)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+}
+func (c *Controller) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := c.parseDiscussionId(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	_, found := c.store[id]
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	delete(c.store, id)
+	w.WriteHeader(http.StatusNoContent)
+}
+func (c *Controller) parseDiscussionId(r *http.Request) (uint, error) {
+	vars := mux.Vars(r)
+	DiscussionIdRaw := vars["id"]
+	fmt.Println(DiscussionIdRaw)
+	// strconv.ParseUint(DiscussionIdRaw, 10, 32)
+	DiscussionId, err := strconv.Atoi(DiscussionIdRaw)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if DiscussionId <= 0 {
+		return 0, errors.New("id must be positive")
+	}
+
+	id := uint(DiscussionId)
+
+	return id, nil
+}
+
+func (c *Controller) HandleUpdateDiscussion(w http.ResponseWriter, r *http.Request) {
+	id, err := c.parseDiscussionId(r)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	_, found := c.store[id]
+
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	d := models.Discussion{}
+	err = json.NewDecoder(r.Body).Decode(&d)
+
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		io.WriteString(w, err.Error())
+		return
+	}
+	d.Id = id
+	c.store[id] = d
+
+	w.WriteHeader(http.StatusNoContent)
 }
